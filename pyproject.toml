@@ -1,0 +1,78 @@
+[project]
+name = "rigil"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Your Name",email = "you@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13, <3.15"
+dependencies = [
+    "litellm==1.81.14",
+    "pymilvus (>=2.6.9,<3.0.0)",
+    "minio (>=7.2.20,<8.0.0)",
+    "fastapi (>=0.129.0,<0.130.0)",
+    "uvicorn (>=0.40.0,<0.41.0)",
+    "python-multipart (>=0.0.22,<0.0.23)",
+    "pymupdf4llm (>=0.3.4,<0.4.0)",
+    "python-dotenv (>=1.0.1,<2.0.0)",
+    "pydantic-settings (>=2.13.0,<3.0.0)",
+    "pillow (>=12.1.1,<13.0.0)",
+    "redis (>=7.4.0,<8.0.0)",
+    "redisvl (>=0.16.0,<0.17.0)",
+    "docling (>=2.0.0,<3.0.0)",
+]
+
+[tool.poetry]
+packages = [{include = "api"}]
+
+[tool.poetry.group.dev.dependencies]
+black = "^25.1.0"
+coverage = "^7.6.12"
+pytest = "^9.0.2"
+ruff = "^0.15.7"
+httpx = "^0.28.0"
+pre-commit = "^4.2.0"
+poethepoet = "^0.34.0"
+
+[tool.ruff]
+line-length = 188
+target-version = "py313"
+exclude = ["__pycache__", "migrations", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.poe.tasks]
+lint = "ruff check ."
+"lint:fix" = "ruff check --fix ."
+format = "ruff format ."
+
+[tool.poetry.scripts]
+start = "api:start"
+serve = "api:serve"
+test = "tests:run_tests"
+"setup:ollama" = "api.scripts.setup:start_ollama"
+"setup:milvus-minio" = "api.scripts.setup:start_milvus_minio"
+"setup:all" = "api.scripts.setup:start_all"
+"stop:ollama" = "api.scripts.setup:stop_ollama"
+"stop:milvus-minio" = "api.scripts.setup:stop_milvus_minio"
+"stop:all" = "api.scripts.setup:stop_all"
+"clear:data" = "api.scripts.setup:clear_data"
+"gen-tenant" = "api.scripts.gen_tenant_stack:main"
+"tenant:start" = "api.scripts.tenant_ops:start"
+"tenant:serve" = "api.scripts.tenant_ops:serve"
+"tenant:down" = "api.scripts.tenant_ops:down"
+"tenant:use" = "api.scripts.tenant_ops:use"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,9 @@
+# Ignore everything in tenants/ by default — real tenant input files
+# (tenants/<tenant>.env) contain per-tenant secrets and must stay out of git.
+*
+
+# Track only the template + docs (see README.md: "Only example.env and this
+# README are tracked").
+!.gitignore
+!example.env
+!README.md
