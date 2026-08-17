@@ -1,6 +1,6 @@
-# Rigil
+# Mavenir Rag
 
-Rigil is a FastAPI-based RAG service for:
+Mavenir Rag is a FastAPI-based RAG service for:
 
 - ingesting corpus documents (PDF/DOCX),
 - storing embeddings in Milvus with metadata,
@@ -176,9 +176,9 @@ poetry run clear:data
 - `GET /corpus/document/{doc_id}/images?topic=...` - list extracted images
 - `GET /corpus/document/{doc_id}/images/download?topic=...` - download image
 
-### ii) Matcher Routes (`/rigil`)
+### ii) Matcher Routes (`/mavenir-rag`)
 
-- `POST /rigil/document/infer`
+- `POST /mavenir-rag/document/infer`
   - inputs include: `topic`, `input_queries`, `limit`, `group_size`,
     `question_answer_type`, `knowledge_feed_mode`
   - returns ranked matches + generated questions + markdown report URL
@@ -260,7 +260,7 @@ Result: chunks remain structurally meaningful (section context + page linkage), 
 
 ## 11. Inference Strategy
 
-Inference is exposed through `POST /rigil/document/infer` in `api/routers/matcher_router.py`, which orchestrates semantic matching + LLM enrichment + report generation.
+Inference is exposed through `POST /mavenir-rag/document/infer` in `api/routers/matcher_router.py`, which orchestrates semantic matching + LLM enrichment + report generation.
 
 ### i) Request handling at matcher router
 
@@ -411,13 +411,13 @@ Use the following runbook to deploy on remote host `192.168.2.195`.
 From your local project parent directory:
 
 ```bash
-zip -r rigil-24-March-Optimized-Inference.zip rigil
+zip -r mavenir-rag-24-March-Optimized-Inference.zip mavenir-rag
 ```
 
 ### 2) Upload zip to remote machine
 
 ```bash
-scp rigil-24-March-Optimized-Inference.zip anuj@192.168.2.195:~/Downloads/
+scp mavenir-rag-24-March-Optimized-Inference.zip anuj@192.168.2.195:~/Downloads/
 ```
 
 ### 3) SSH into remote machine
@@ -449,7 +449,7 @@ sudo kill -9 <PID>
 ### 6) Stop all project services from old folder
 
 ```bash
-cd rigil
+cd mavenir-rag
 poetry run stop:all
 ```
 
@@ -457,19 +457,19 @@ poetry run stop:all
 
 ```bash
 cd ~/Downloads/
-sudo rm -rf rigil
+sudo rm -rf mavenir-rag
 ```
 
 ### 8) Unzip uploaded archive
 
 ```bash
-unzip rigil-24-March-Optimized-Inference.zip
+unzip mavenir-rag-24-March-Optimized-Inference.zip
 ```
 
 ### 9) Enter project folder
 
 ```bash
-cd rigil
+cd mavenir-rag
 ```
 
 ### 10) Set correct Python for Poetry
@@ -503,8 +503,8 @@ LLM__LITELLM_EMBED_MODEL=ollama/nomic-embed-text
 # Milvus
 MILVUS__HOST=localhost
 MILVUS__PORT=19531
-MILVUS__CORPUS_COLLECTION_NAME=rigil_corpus
-MILVUS__INPUT_COLLECTION_NAME=rigil_input
+MILVUS__CORPUS_COLLECTION_NAME=mavenir_rag_corpus
+MILVUS__INPUT_COLLECTION_NAME=mavenir_rag_input
 MILVUS__VECTOR_DIM=768
 MILVUS__METRIC_TYPE=COSINE
 
@@ -512,7 +512,7 @@ MILVUS__METRIC_TYPE=COSINE
 MINIO__ENDPOINT=192.168.2.195:9002
 MINIO__ACCESS_KEY=minioadmin
 MINIO__SECRET_KEY=minioadmin
-MINIO__BUCKET_NAME=rigil-storage
+MINIO__BUCKET_NAME=mavenir-rag-storage
 MINIO__SECURE=false
 
 # Doc Parser
@@ -521,7 +521,7 @@ DOC_PARSER__CHUNK_MAX_TOKENS=500
 DOC_PARSER__TIKTOKEN_ENCODER=cl100k_base
 
 # Docker container services volume path
-DOCKER_VOLUME_DIRECTORY=~/Downloads/rigil-docker-volumes_v1
+DOCKER_VOLUME_DIRECTORY=~/Downloads/mavenir-rag-docker-volumes_v1
 ```
 
 ### 13) Start required services
@@ -568,6 +568,6 @@ Gaps between the current implementation and the target RAG architecture. See `TO
 | # | Enhancement | Current state | Notes |
 | --- | --- | --- | --- |
 | 1 | **DOCX / TXT ingestion** | Config allows `.pdf/.docx/.txt/.md` (`api/config.py`), but the parser hardcodes PDF (`pymupdf.open(..., filetype="pdf")` in `api/utils/parsers/hybrid_parser.py`; only `InputFormat.PDF` is registered with docling). | Add real per-format parsing so DOCX/TXT are extracted correctly instead of failing or being misparsed. |
-| 2 | **Streamlit chat interface** | No frontend exists — only the `/rigil/document/chat` API endpoint. | Build a Streamlit chat UI wired to the existing chat endpoint. |
+| 2 | **Streamlit chat interface** | No frontend exists — only the `/mavenir-rag/document/chat` API endpoint. | Build a Streamlit chat UI wired to the existing chat endpoint. |
 | 3 | **RRF hybrid reranking** | Only `WeightedRanker` is wired up in `api/client/milvus_client.py`. | Add Milvus `RRFRanker` as a selectable reranking strategy alongside the weighted ranker. |
 | 4 | **HuggingFace embedding provider** | Provider enum supports `ollama` / `openai` / `gemini` (`api/config.py`). | Add a HuggingFace / sentence-transformers dense-embedding option. Claude can be plugged in as a chat provider via LiteLLM (`anthropic/<model-id>`), but has no embedding endpoint — embeddings stay on Ollama/OpenAI/HF. |

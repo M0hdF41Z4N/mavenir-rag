@@ -64,7 +64,7 @@ from api.utils.rag_pipeline import RagClients, RagInferenceConfig, rag_inference
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/rigil", tags=["Matcher"])
+router = APIRouter(prefix="/mavenir-rag", tags=["Matcher"])
 
 
 @router.post("/auth/token", response_model=KeycloakTokenResponse)

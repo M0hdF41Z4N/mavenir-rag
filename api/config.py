@@ -44,8 +44,8 @@ class LLMSettings(BaseSettings):
 class MilvusSettings(BaseSettings):
     host: str = "localhost"
     port: int = 19530
-    corpus_collection_name: str = "rigil_corpus"
-    input_collection_name: str = "rigil_input"
+    corpus_collection_name: str = "mavenir_rag_corpus"
+    input_collection_name: str = "mavenir_rag_input"
     vector_dim: int = 768
     metric_type: Literal["COSINE", "EUCLIDEAN", "IP"] = "COSINE"
     index_type: str = "HNSW"

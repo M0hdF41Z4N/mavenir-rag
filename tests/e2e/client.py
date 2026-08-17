@@ -50,13 +50,13 @@ class E2EClient:
             ("input_queries", doc_id),
             ("session_id", session_id),
         ]
-        r = self._client.post("/rigil/document/infer", params=params)
+        r = self._client.post("/mavenir-rag/document/infer", params=params)
         self._raise(r, "infer")
         return r.json()
 
     def chat(self, query: str, topic: str, session_id: str) -> dict:
         params = {"query": query, "topic": topic, "session_id": session_id}
-        r = self._client.post("/rigil/document/chat", params=params)
+        r = self._client.post("/mavenir-rag/document/chat", params=params)
         self._raise(r, "chat")
         return r.json()
 

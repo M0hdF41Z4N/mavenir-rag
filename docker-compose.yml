@@ -11,7 +11,7 @@ version: "3.5"
 
 services:
   etcd:
-    container_name: rigil-milvus-etcd
+    container_name: mavenir-rag-milvus-etcd
     image: quay.io/coreos/etcd:v3.5.25
     environment:
       - ETCD_AUTO_COMPACTION_MODE=revision
@@ -28,7 +28,7 @@ services:
       retries: 3
 
   minio:
-    container_name: rigil-milvus-minio
+    container_name: mavenir-rag-milvus-minio
     image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     environment:
       MINIO_ACCESS_KEY: minioadmin
@@ -51,7 +51,7 @@ services:
       retries: 3
 
   standalone:
-    container_name: rigil-milvus-standalone
+    container_name: mavenir-rag-milvus-standalone
     # Note: Use the latest Milvus docker image to make use of "Group Search"
     image: milvusdb/milvus:v2.6.11
     command: ["milvus", "run", "standalone"]
@@ -77,7 +77,7 @@ services:
       - "minio"
   
   redis:
-    container_name: rigil-redis
+    container_name: mavenir-rag-redis
     image: redis/redis-stack-server:latest
     ports:
       - "6379:6379"
@@ -87,4 +87,4 @@ services:
 
 networks:
   default:
-    name: rigil-milvus
+    name: mavenir-rag-milvus

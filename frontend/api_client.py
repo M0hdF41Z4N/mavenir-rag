@@ -1,4 +1,4 @@
-"""Thin synchronous HTTP client for the Rigil chat API.
+"""Thin synchronous HTTP client for the Mavenir Rag chat API.
 
 The Streamlit frontend runs as a separate process and talks to the FastAPI
 backend over HTTP. This module wraps the four endpoints the UI needs and keeps
@@ -21,7 +21,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://localhost:8001"
-API_PREFIX = "/rigil"
+API_PREFIX = "/mavenir-rag"
 DEFAULT_TIMEOUT_SECONDS = 60.0
 
 # Topics accepted by the backend TopicEnum. Kept as a plain tuple so the

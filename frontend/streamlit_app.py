@@ -1,6 +1,6 @@
-"""Streamlit chat frontend for the Rigil corpus-grounded RAG chatbot.
+"""Streamlit chat frontend for the Mavenir Rag corpus-grounded RAG chatbot.
 
-Wired to the existing ``POST /rigil/document/chat`` endpoint. Answers are
+Wired to the existing ``POST /mavenir-rag/document/chat`` endpoint. Answers are
 generated strictly from the ingested corpus; each answer shows its source
 citations. A sidebar lists prior sessions and supports loading, starting, and
 deleting conversations.
@@ -21,7 +21,7 @@ from api_client import ApiError, ChatMessage, ChatSource
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-PAGE_TITLE = "Rigil Corpus Chat"
+PAGE_TITLE = "Mavenir Rag Corpus Chat"
 
 
 def _init_state() -> None:

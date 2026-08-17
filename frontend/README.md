@@ -1,7 +1,7 @@
 # Streamlit Chat Frontend
 
 A minimal Streamlit UI wired to the existing backend chat endpoint
-(`POST /rigil/document/chat`). It runs as a **separate process** and talks to the
+(`POST /mavenir-rag/document/chat`). It runs as a **separate process** and talks to the
 FastAPI backend over HTTP — no backend code changes are required.
 
 ## Features
@@ -45,7 +45,7 @@ The frontend reads two environment variables:
 
 | Variable       | Default                 | Purpose                                                                 |
 | -------------- | ----------------------- | ----------------------------------------------------------------------- |
-| `API_BASE_URL` | `http://localhost:8001` | Backend base URL (the `/rigil` prefix is added automatically).          |
+| `API_BASE_URL` | `http://localhost:8001` | Backend base URL (the `/mavenir-rag` prefix is added automatically).          |
 | `API_TOKEN`    | _(unset)_               | Keycloak access token. **Leave unset in `APP_ENV=dev`.** Required for any non-dev deployment; sent as `Authorization: Bearer <token>`. |
 
 Example against a non-dev backend:
@@ -55,7 +55,7 @@ API_BASE_URL=https://rag.example.com API_TOKEN="<access_token>" \
   poetry run streamlit run frontend/streamlit_app.py
 ```
 
-Obtain a token via `POST /rigil/auth/token` (Keycloak refresh-token exchange).
+Obtain a token via `POST /mavenir-rag/auth/token` (Keycloak refresh-token exchange).
 
 ## Files
 

@@ -77,7 +77,7 @@ def main() -> int:
             _log(f"Task completed. doc_id={doc_id} (ingestion_elapsed={ingestion_elapsed})")
 
             session_id = str(uuid.uuid4())
-            _log(f"Running /rigil/document/infer (session_id={session_id})...")
+            _log(f"Running /mavenir-rag/document/infer (session_id={session_id})...")
             infer_resp = client.infer(doc_id=doc_id, topic=TOPIC, session_id=session_id)
             markdown_url = (infer_resp.get("result") or {}).get("markdown_report_url")
             if markdown_url:

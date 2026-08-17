@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Rigil FastAPI App", lifespan=lifespan)
+app = FastAPI(title="Mavenir Rag FastAPI App", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -108,9 +108,9 @@ def _custom_openapi():
         title=app.title,
         version=app.version,
         description=(
-            "Rigil document matching and RAG API.\n\n"
+            "Mavenir Rag document matching and RAG API.\n\n"
             "**Authentication:** Protected endpoints require a Keycloak Bearer token. "
-            "Call `POST /rigil/auth/token` with a Keycloak refresh token to obtain one, "
+            "Call `POST /mavenir-rag/auth/token` with a Keycloak refresh token to obtain one, "
             "then click **Authorize** and paste the returned `access_token` (without the 'Bearer' prefix)."
         ),
         routes=app.routes,
@@ -121,7 +121,7 @@ def _custom_openapi():
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "Keycloak access token. Obtain one via POST /rigil/auth/token.",
+            "description": "Keycloak access token. Obtain one via POST /mavenir-rag/auth/token.",
         }
     )
     app.openapi_schema = schema
