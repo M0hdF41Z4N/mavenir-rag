@@ -26,6 +26,16 @@ dependencies = [
 [tool.poetry]
 packages = [{include = "api"}]
 
+# Optional cross-encoder reranking (B2). Pulls in sentence-transformers + torch, so it is
+# an opt-in group rather than a core dependency. Install with:
+#   poetry install --with rerank
+# and enable via RERANK__ENABLE_RERANK=true.
+[tool.poetry.group.rerank]
+optional = true
+
+[tool.poetry.group.rerank.dependencies]
+sentence-transformers = ">=3.0.0,<6.0.0"
+
 [tool.poetry.group.dev.dependencies]
 black = "^25.1.0"
 coverage = "^7.6.12"
@@ -34,6 +44,7 @@ ruff = "^0.15.7"
 httpx = "^0.28.0"
 pre-commit = "^4.2.0"
 poethepoet = "^0.34.0"
+streamlit = "^1.40.0"
 
 [tool.ruff]
 line-length = 188
@@ -55,6 +66,7 @@ indent-style = "space"
 lint = "ruff check ."
 "lint:fix" = "ruff check --fix ."
 format = "ruff format ."
+ui = "streamlit run frontend/streamlit_app.py"
 
 [tool.poetry.scripts]
 start = "api:start"

@@ -12,6 +12,12 @@ _STRICT_JSON_INSTRUCTIONS = """\
 # Lowercased and contraction-agnostic so it matches both "don't" and "do not" variants.
 NO_INFO_DETECTOR = "enough information in the corpus"
 
+# Canonical abstention message. The system prompt instructs the LLM to emit this
+# verbatim (see CORE RULE 3), and the evidence-sufficiency gate returns the same
+# string when retrieval is too weak to answer — so both refusal paths look identical
+# to the caller and both trip NO_INFO_DETECTOR.
+NO_INFO_ANSWER = "I don't have enough information in the corpus to answer this question."
+
 IMAGE_DESCRIPTION_PROMPT = (
     "Describe in about 200 words only this image in detail. "
     "Focus on diagrams, labels, and meaning. "
@@ -91,6 +97,86 @@ Context:
 \"\"\"
 {context}
 \"\"\"
+""".strip()
+
+GROUNDEDNESS_VERIFIER_PROMPT = """
+You are a strict fact-checking verifier for a RAG system.
+
+You are given NUMBERED CONTEXT chunks and an ANSWER that was generated from them.
+Your job is to decompose the ANSWER into atomic factual claims and, for each claim,
+decide whether the CONTEXT explicitly supports it.
+
+RULES:
+- Judge ONLY against the provided CONTEXT. Do NOT use outside knowledge.
+- A claim is supported ONLY if one or more context chunks explicitly state or directly
+  entail it. Plausible-but-unstated claims are NOT supported.
+- List the 1-based chunk numbers that support each claim in "source_indices".
+- If no chunk supports a claim, "source_indices" must be empty and "is_supported" false.
+- Ignore non-factual sentences (greetings, hedging, "I don't have enough information").
+
+NUMBERED CONTEXT:
+\"\"\"
+{numbered_context}
+\"\"\"
+
+ANSWER:
+\"\"\"
+{answer}
+\"\"\"
+
+STRICT OUTPUT FORMAT:
+- Return ONLY valid JSON. Do NOT include any introduction, explanation, or extra text.
+- Do NOT wrap the JSON in markdown code fences or backticks.
+- The JSON must match this EXACT schema — do NOT add or remove any keys:
+{{
+  "claims": [
+    {{
+      "claim": "<atomic factual claim>",
+      "source_indices": [1, 2],
+      "is_supported": true
+    }}
+  ]
+}}
+- Each "claim" value must be a single string with no newline characters.
+- "source_indices" must be an array of integers referencing the numbered context.
+- "is_supported" must be a boolean.
+""".strip()
+
+CONTRADICTION_DETECTOR_PROMPT = """
+You are a strict consistency checker for a RAG system.
+
+You are given NUMBERED CONTEXT chunks retrieved for a user's question. Identify pairs of
+chunks that DIRECTLY CONTRADICT each other — i.e. they make mutually exclusive factual
+claims about the same thing (e.g. different values, dates, names, or statuses for the same
+entity).
+
+RULES:
+- Only report DIRECT contradictions between two chunks. Do NOT report chunks that are
+  merely different, complementary, or about different subjects.
+- Judge ONLY against the provided chunks. Do NOT use outside knowledge.
+- Reference chunks by their 1-based number.
+- If there are no contradictions, return an empty "contradictions" array.
+
+NUMBERED CONTEXT:
+\"\"\"
+{numbered_context}
+\"\"\"
+
+STRICT OUTPUT FORMAT:
+- Return ONLY valid JSON. Do NOT include any introduction, explanation, or extra text.
+- Do NOT wrap the JSON in markdown code fences or backticks.
+- The JSON must match this EXACT schema — do NOT add or remove any keys:
+{{
+  "contradictions": [
+    {{
+      "source_index_a": 1,
+      "source_index_b": 3,
+      "description": "<one sentence: what they disagree about>"
+    }}
+  ]
+}}
+- "source_index_a" and "source_index_b" must be integers referencing the numbered context.
+- "description" must be a single string with no newline characters.
 """.strip()
 
 SUBJECTIVE_PROMPT_TEMPLATE = """

@@ -155,6 +155,74 @@ class ChatMessage(BaseModel):
     sources: list[ChatSource] | None = None
 
 
+class ClaimVerdict(BaseModel):
+    """One factual claim extracted from an answer, checked against the retrieved context.
+
+    `source_indices` are 1-based positions into the numbered context chunks shown to the
+    verifier (i.e. the same [n] markers the generator was told to cite). `is_supported`
+    is True only when the listed chunks actually entail the claim.
+    """
+
+    claim: str
+    source_indices: list[int] = []
+    is_supported: bool
+
+
+class ClaimCitation(BaseModel):
+    """A claim paired with the resolved sources that support it, for UI rendering.
+
+    `source_indices` are the 1-based `[n]` markers referenced inline; `sources` are the
+    corresponding `ChatSource` objects (empty for an unsupported claim).
+    """
+
+    claim: str
+    source_indices: list[int] = []
+    sources: list[ChatSource] = []
+    is_supported: bool
+
+
+class GroundednessReport(BaseModel):
+    """Result of the post-generation groundedness check over an answer.
+
+    `checked` is False when verification was disabled or could not run (e.g. the verifier
+    LLM call failed) — callers must not treat an unchecked answer as verified.
+    """
+
+    checked: bool
+    is_grounded: bool
+    claims: list[ClaimVerdict] = []
+    # Per-claim citations resolved to real sources (claim-level citation view). Empty
+    # until the answer is rendered with citations; distinct from `claims`, which is the
+    # raw verdict list.
+    citations: list[ClaimCitation] = []
+
+
+class Contradiction(BaseModel):
+    """A detected disagreement between two retrieved chunks.
+
+    `source_index_a`/`source_index_b` are 1-based indices into the numbered context; the
+    resolved `ChatSource`s (when available) let the UI show which documents conflict.
+    """
+
+    source_index_a: int
+    source_index_b: int
+    description: str
+    source_a: ChatSource | None = None
+    source_b: ChatSource | None = None
+
+
+class ContradictionReport(BaseModel):
+    """Result of the contradiction check over the retrieved context.
+
+    `checked` is False when the check was disabled or could not run. `has_contradiction`
+    is True only when the detector found at least one conflicting pair.
+    """
+
+    checked: bool
+    has_contradiction: bool
+    contradictions: list[Contradiction] = []
+
+
 # -------------------------------
 # Milvus Schemas
 # -------------------------------
@@ -289,6 +357,12 @@ class ChatResponse(BaseModel):
     sources: list[ChatSource]
     session_id: str | None = None
     history: list[ChatMessage] = []
+    # Post-generation groundedness verdict. None when the check is disabled so existing
+    # clients see no behavior change; populated when chat.enable_groundedness_check is on.
+    groundedness: GroundednessReport | None = None
+    # Contradiction check over the retrieved context. None when disabled; populated when
+    # chat.enable_contradiction_check is on.
+    contradiction: ContradictionReport | None = None
 
 
 class SessionSummary(BaseModel):

@@ -132,6 +132,8 @@ def rag_inference_pipeline(
         milvus_search_results=milvus_search_results,
         input_queries=config.input_queries,
         corpus_storage=clients.corpus_storage,
+        aggregation=settings.chat.doc_score_aggregation,
+        top_k=settings.chat.doc_score_top_k,
     )
 
     llm_enriched_report = generate_questions_from_chunks(

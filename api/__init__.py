@@ -18,6 +18,7 @@ from api.routers import corpus_router, ingestion_router, matcher_router, tasks_r
 from api.services import get_hello_message
 from api.services.corpus_storage import CorpusStorageService
 from api.services.ingestion_service import IngestionService
+from api.services.reranker import CrossEncoderReranker
 from api.services.task_manager import TaskManager
 from api.utils.markdown_parser import MarkdownParser
 
@@ -37,6 +38,9 @@ async def lifespan(app: FastAPI):
     app.state.markdown_parser = MarkdownParser(parser_settings=settings.doc_parser)
     app.state.settings = settings
     app.state.corpus_storage = CorpusStorageService(minio_client=app.state.minio_client)
+    # Cheap to construct — the cross-encoder model is lazy-loaded on first rerank, so
+    # this touches no heavy deps while reranking is disabled.
+    app.state.reranker = CrossEncoderReranker(settings=settings.rerank)
     app.state.task_manager = TaskManager(
         redis=app.state.redis_client.redis,
         ttl_seconds=settings.background.task_result_ttl_seconds,

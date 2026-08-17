@@ -29,18 +29,27 @@ class LLMClient:
         self.litellm_embed_model = settings.litellm_embed_model
         self.api_base = settings.ollama_api_base if settings.provider == "ollama" else None
         self.chat_temperature = settings.chat_temperature
+        self.grounded_temperature = settings.grounded_temperature
+        # Verifier model for the groundedness check; falls back to the chat model so the
+        # check is self-judging only when no separate verifier is configured.
+        self.verifier_model = settings.litellm_verifier_model or settings.litellm_chat_model
 
         if not self.litellm_chat_model or not self.litellm_embed_model:
             raise ValueError("litellm_chat_model and litellm_embed_model must be set in config")
 
-    def chat(self, messages: list[ChatMessage]) -> str:
+    def chat(self, messages: list[ChatMessage], temperature: float | None = None, model: str | None = None) -> str:
         # Use LiteLLM Chat Completions API
         # Ref: https://docs.litellm.ai/docs/completion/usage#quick-start
+        # temperature defaults to the creative chat_temperature; the grounded chat
+        # path passes grounded_temperature (0.0) so answers stay pinned to evidence.
+        # model defaults to litellm_chat_model; the groundedness verifier passes
+        # verifier_model so an independent model grades the answer. All models share
+        # this client's api_base (same provider).
         response = completion(
-            model=self.litellm_chat_model,
+            model=self.litellm_chat_model if model is None else model,
             messages=messages,
             api_base=self.api_base,
-            temperature=self.chat_temperature,
+            temperature=self.chat_temperature if temperature is None else temperature,
         )
 
         return response.choices[0].message.content

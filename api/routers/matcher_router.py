@@ -22,13 +22,16 @@ from api.dependencies import (
     get_milvus_client,
     get_minio_client,
     get_redis_client,
+    get_reranker,
 )
 from api.exceptions import NotFoundError
 from api.models import (
     ChatMessage,
     ChatResponse,
     ChatSource,
+    ContradictionReport,
     DocumentInferRoute,
+    GroundednessReport,
     KnowledgeFeedModeEnum,
     MilvusSearchHit,
     QuestionTypeEnum,
@@ -38,7 +41,17 @@ from api.models import (
     TopicEnum,
     UserSessionListResponse,
 )
+from api.services.contradiction_detector import (
+    detect_contradictions,
+    render_contradiction_notice,
+)
 from api.services.corpus_storage import CorpusStorageService
+from api.services.groundedness_verifier import (
+    render_cited_answer,
+    resolve_citations,
+    verify_groundedness,
+)
+from api.services.reranker import CrossEncoderReranker
 from api.utils.keycloak_helper import (
     AuthenticatedKeycloakUser,
     KeycloakTokenRequest,
@@ -46,7 +59,7 @@ from api.utils.keycloak_helper import (
     create_access_token,
     require_keycloak_user,
 )
-from api.utils.llm_prompts import CHATBOT_SYSTEM_PROMPT, NO_INFO_DETECTOR
+from api.utils.llm_prompts import CHATBOT_SYSTEM_PROMPT, NO_INFO_ANSWER, NO_INFO_DETECTOR
 from api.utils.rag_pipeline import RagClients, RagInferenceConfig, rag_inference_pipeline
 
 logger = logging.getLogger(__name__)
@@ -151,17 +164,104 @@ def _search_corpus(
     topic: TopicEnum,
     llm_client: LLMClient,
     milvus_client: MilvusClient,
+    reranker: CrossEncoderReranker,
 ) -> list[MilvusSearchHit]:
-    """Embed the query and retrieve the top matching corpus chunks from Milvus."""
+    """Retrieve corpus chunks for the query, optionally cross-encoder reranked.
+
+    When reranking is enabled, over-fetch a wider candidate pool from Milvus, re-score it
+    with the cross-encoder, and keep the top-k — putting genuinely relevant chunks in front
+    of the LLM. When disabled, behaves exactly as before (fusion-ranked, `chat_search_limit`).
+    """
     query_vector = llm_client.embed(query)
+    limit = settings.chat.chat_search_limit
+    if settings.rerank.enable_rerank:
+        limit = settings.chat.chat_search_limit * settings.rerank.rerank_over_fetch_factor
+
     results = milvus_client.search(
         query_vectors=[query_vector],
         query_texts=[query],
-        limit=settings.chat.chat_search_limit,
+        limit=limit,
         group_size=settings.chat.chat_search_group_size,
         expr=f'topic == "{topic.value}"',
     )
-    return results[0]
+    hits = results[0]
+    if settings.rerank.enable_rerank:
+        hits = reranker.rerank(query, hits, top_k=settings.chat.chat_search_limit)
+    return hits
+
+
+def _has_sufficient_evidence(hits: list[MilvusSearchHit]) -> bool:
+    """Evidence-sufficiency gate: is the retrieved context strong enough to answer?
+
+    Returns True only when the best-scoring hit clears `min_evidence_score`. When it
+    doesn't (or nothing was retrieved), the caller abstains deterministically instead
+    of asking the LLM to answer from weak evidence — the most reliable single control
+    against grounding-gap hallucinations, since it never reaches the model at all.
+
+    Note: `hit.distance` is the fused WeightedRanker score (dense + BM25), where higher
+    means more relevant; the top hit is the max, so we only need to check it.
+    """
+    if not hits:
+        return False
+    best_score = max(hit.distance for hit in hits)
+    return best_score >= settings.chat.min_evidence_score
+
+
+def _apply_groundedness_check(
+    response: str,
+    hits: list[MilvusSearchHit],
+    sources: list[ChatSource],
+    llm_client: LLMClient,
+) -> tuple[str, list[ChatSource], GroundednessReport | None]:
+    """Run the post-generation groundedness verifier and apply the abstention policy.
+
+    Returns the (possibly replaced) answer, its sources, and the report. When the check
+    is disabled, returns the inputs unchanged with a None report. When the verifier finds
+    unsupported claims and `abstain_on_ungrounded` is set, the answer is swapped for the
+    canonical abstention and sources cleared; otherwise the answer stands but the report
+    flags `is_grounded=False` for the caller to surface.
+    """
+    if not settings.chat.enable_groundedness_check:
+        return response, sources, None
+
+    report = verify_groundedness(response, hits, llm_client)
+    if report.is_grounded:
+        # Resolve claim → source citations and (optionally) render them into the answer.
+        report.citations = resolve_citations(report.claims, sources)
+        if settings.chat.render_claim_citations:
+            response = render_cited_answer(response, report.citations)
+        return response, sources, report
+
+    if settings.chat.abstain_on_ungrounded:
+        logger.info("Answer failed groundedness check; abstaining. checked=%s", report.checked)
+        return NO_INFO_ANSWER, [], report
+
+    logger.info("Answer failed groundedness check; returning as-is with is_grounded=False.")
+    return response, sources, report
+
+
+def _apply_contradiction_check(
+    response: str,
+    hits: list[MilvusSearchHit],
+    sources: list[ChatSource],
+    llm_client: LLMClient,
+) -> tuple[str, ContradictionReport | None]:
+    """Scan retrieved chunks for contradictions and (optionally) disclose them in the answer.
+
+    Returns the (possibly prefixed) answer and the report. When disabled, returns the answer
+    unchanged with a None report. When conflicts are found and `disclose_contradictions` is
+    set, a short notice is prepended so the user knows the sources disagree; the report is
+    attached to the response either way.
+    """
+    if not settings.chat.enable_contradiction_check:
+        return response, None
+
+    report = detect_contradictions(hits, sources, llm_client)
+    if report.has_contradiction:
+        logger.info("Contradiction detected among retrieved chunks: %d pair(s).", len(report.contradictions))
+        if settings.chat.disclose_contradictions:
+            response = render_contradiction_notice(response, report)
+    return response, report
 
 
 def _build_sources_and_context(
@@ -268,6 +368,7 @@ async def chat_with_llm(
     llm_client: LLMClient = Depends(get_llm_client),  # noqa: B008
     milvus_client: MilvusClient = Depends(get_milvus_client),  # noqa: B008
     corpus_storage: CorpusStorageService = Depends(get_corpus_storage),  # noqa: B008
+    reranker: CrossEncoderReranker = Depends(get_reranker),  # noqa: B008
 ) -> ChatResponse:
     is_new = session_id is None
     if session_id is None:
@@ -286,15 +387,36 @@ async def chat_with_llm(
         if meta is None:
             raise NotFoundError("Session not found.")
 
-    hits = _search_corpus(query, topic, llm_client, milvus_client)
-    context, sources = _build_sources_and_context(hits, topic, corpus_storage)
-    system_prompt = CHATBOT_SYSTEM_PROMPT.format(context=context)
-    chat_history = redis_client.get_recent_messages(current_user.username, session_id, settings.chat.history_context_k)
-    messages = _build_chat_messages(system_prompt, _useful_history(chat_history), query)
+    hits = _search_corpus(query, topic, llm_client, milvus_client, reranker)
 
-    response = llm_client.chat(messages)
-    if NO_INFO_DETECTOR in response.lower():
-        sources = []
+    # Evidence-sufficiency gate: if retrieval is too weak, abstain deterministically
+    # without ever calling the LLM. This closes the grounding gap the prompt alone
+    # can't guarantee — no evidence, no answer, no chance to hallucinate.
+    groundedness: GroundednessReport | None = None
+    contradiction: ContradictionReport | None = None
+    if not _has_sufficient_evidence(hits):
+        logger.info("Insufficient evidence for query; abstaining. session_id=%s topic=%s", session_id, topic)
+        response = NO_INFO_ANSWER
+        sources: list[ChatSource] = []
+    else:
+        context, sources = _build_sources_and_context(hits, topic, corpus_storage)
+        system_prompt = CHATBOT_SYSTEM_PROMPT.format(context=context)
+        chat_history = redis_client.get_recent_messages(current_user.username, session_id, settings.chat.history_context_k)
+        messages = _build_chat_messages(system_prompt, _useful_history(chat_history), query)
+
+        # Grounded path runs at grounded_temperature (0.0) so the answer stays pinned
+        # to the retrieved evidence rather than sampling around it.
+        response = llm_client.chat(messages, temperature=llm_client.grounded_temperature)
+        if NO_INFO_DETECTOR in response.lower():
+            sources = []
+        else:
+            # Post-generation verification: catch confident fabrications the prompt
+            # can't. Only runs on real answers (a refusal has nothing to verify).
+            response, sources, groundedness = _apply_groundedness_check(response, hits, sources, llm_client)
+            # Surface disagreement among the retrieved sources rather than silently
+            # answering from whichever chunk ranked higher. Skipped once we've abstained.
+            if NO_INFO_DETECTOR not in response.lower():
+                response, contradiction = _apply_contradiction_check(response, hits, sources, llm_client)
 
     redis_client.store_message(
         current_user.username,
@@ -314,7 +436,14 @@ async def chat_with_llm(
     raw_history = redis_client.get_recent_messages(current_user.username, session_id, settings.redis.chat_history_limit)
     history = _build_history(raw_history)
 
-    return ChatResponse(answer=response, sources=sources, session_id=session_id, history=history)
+    return ChatResponse(
+        answer=response,
+        sources=sources,
+        session_id=session_id,
+        history=history,
+        groundedness=groundedness,
+        contradiction=contradiction,
+    )
 
 
 @router.delete(

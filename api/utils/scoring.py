@@ -1,8 +1,9 @@
 # Aggregates per-chunk Milvus search hits into per-document match reports.
-# Compatibility score = arithmetic mean of all chunk cosine distances for a document.
-# Note: mean averaging treats all chunks equally — a doc with one very strong match
-# and many weak ones scores the same as a doc with uniformly moderate relevance.
+# Compatibility score = aggregation of a document's chunk scores (default: max — the best
+# chunk represents the doc). "mean" (legacy) and "top_k_mean" are also available; "max"
+# avoids letting a pile of weak chunks drag down a doc that has one excellent match.
 from collections import defaultdict
+from typing import Literal
 
 import numpy as np
 
@@ -16,12 +17,33 @@ from api.models import (
 )
 from api.services.corpus_storage import CorpusStorageService
 
+ScoreAggregation = Literal["max", "mean", "top_k_mean"]
+
+
+def aggregate_doc_score(scores: list[float], aggregation: ScoreAggregation, top_k: int) -> float:
+    """Reduce a document's per-chunk scores to a single compatibility score.
+
+    "max" takes the best chunk (a strong hit is not diluted by unrelated chunks), "mean"
+    is the legacy all-chunk average, and "top_k_mean" averages the strongest `top_k`
+    chunks. Empty input scores 0.0.
+    """
+    if not scores:
+        return 0.0
+    if aggregation == "mean":
+        return float(np.mean(scores))
+    if aggregation == "top_k_mean":
+        top_scores = sorted(scores, reverse=True)[: max(1, top_k)]
+        return float(np.mean(top_scores))
+    return float(max(scores))  # "max" (default)
+
 
 def generate_doc_match_report(
     topic: TopicEnum,
     milvus_search_results: list[list[MilvusSearchHit]],
     input_queries: list[str],
     corpus_storage: CorpusStorageService,
+    aggregation: ScoreAggregation = "max",
+    top_k: int = 3,
 ) -> list[InputQueryOverallReport]:
     # Flatten + group
     final_reports: list[InputQueryOverallReport] = []
@@ -41,11 +63,10 @@ def generate_doc_match_report(
             if not obj:
                 continue  # skip missing docs; was returning None and aborting the whole report
 
-            # Average of ALL chunk scores
             doc_url = corpus_storage.presigned_url_for(doc_id, topic)
             file_name = obj.metadata.get("x-amz-meta-original-filename", doc_id)
 
-            compatibility_score = float(np.mean(doc_scores[doc_id]))  # average of ALL chunk scores
+            compatibility_score = aggregate_doc_score(doc_scores[doc_id], aggregation, top_k)
 
             # Convert to InputQueryChunkMatch
             chunk_matches = [

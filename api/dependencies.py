@@ -11,6 +11,7 @@ from api.client.redis_client import RedisClient
 from api.config import Settings
 from api.services.corpus_storage import CorpusStorageService
 from api.services.ingestion_service import IngestionService
+from api.services.reranker import CrossEncoderReranker
 from api.services.task_manager import TaskManager
 from api.utils.markdown_parser import MarkdownParser
 
@@ -49,3 +50,7 @@ def get_corpus_storage(request: Request) -> CorpusStorageService:
 
 def get_ingestion_service(request: Request) -> IngestionService:
     return request.app.state.ingestion_service
+
+
+def get_reranker(request: Request) -> CrossEncoderReranker:
+    return request.app.state.reranker
