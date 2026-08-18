@@ -59,11 +59,48 @@ class ChatMessage:
 
 
 @dataclass
+class ClaimCitation:
+    """A claim paired with the [n] source indices and resolved sources that back it."""
+
+    claim: str
+    is_supported: bool
+    source_indices: list[int] = field(default_factory=list)
+    sources: list[ChatSource] = field(default_factory=list)
+
+
+@dataclass
+class GroundednessReport:
+    checked: bool
+    is_grounded: bool
+    citations: list[ClaimCitation] = field(default_factory=list)
+
+
+@dataclass
+class Contradiction:
+    source_index_a: int
+    source_index_b: int
+    description: str
+    source_a: ChatSource | None = None
+    source_b: ChatSource | None = None
+
+
+@dataclass
+class ContradictionReport:
+    checked: bool
+    has_contradiction: bool
+    contradictions: list[Contradiction] = field(default_factory=list)
+
+
+@dataclass
 class ChatResult:
     answer: str
     session_id: str | None
     sources: list[ChatSource]
     history: list[ChatMessage]
+    # Present only on a live answer (not persisted in stored history), and only when the
+    # corresponding backend checks are enabled — None otherwise.
+    groundedness: GroundednessReport | None = None
+    contradiction: ContradictionReport | None = None
 
 
 @dataclass
@@ -95,6 +132,45 @@ def _parse_source(raw: dict[str, object]) -> ChatSource:
         relevance_score=float(raw.get("relevance_score", 0.0)),
         chunk_excerpt=str(raw.get("chunk_excerpt", "")),
         page_num=raw.get("page_num"),  # type: ignore[arg-type]
+    )
+
+
+def _parse_groundedness(raw: object) -> GroundednessReport | None:
+    if not isinstance(raw, dict):
+        return None
+    citations = [
+        ClaimCitation(
+            claim=str(c.get("claim", "")),
+            is_supported=bool(c.get("is_supported", False)),
+            source_indices=[int(i) for i in (c.get("source_indices") or [])],
+            sources=[_parse_source(s) for s in (c.get("sources") or [])],
+        )
+        for c in (raw.get("citations") or [])  # type: ignore[union-attr]
+    ]
+    return GroundednessReport(
+        checked=bool(raw.get("checked", False)),
+        is_grounded=bool(raw.get("is_grounded", False)),
+        citations=citations,
+    )
+
+
+def _parse_contradiction(raw: object) -> ContradictionReport | None:
+    if not isinstance(raw, dict):
+        return None
+    contradictions = [
+        Contradiction(
+            source_index_a=int(c.get("source_index_a", 0)),
+            source_index_b=int(c.get("source_index_b", 0)),
+            description=str(c.get("description", "")),
+            source_a=_parse_source(c["source_a"]) if c.get("source_a") else None,
+            source_b=_parse_source(c["source_b"]) if c.get("source_b") else None,
+        )
+        for c in (raw.get("contradictions") or [])  # type: ignore[union-attr]
+    ]
+    return ContradictionReport(
+        checked=bool(raw.get("checked", False)),
+        has_contradiction=bool(raw.get("has_contradiction", False)),
+        contradictions=contradictions,
     )
 
 
@@ -154,6 +230,8 @@ def send_chat(query: str, topic: str, session_id: str | None) -> ChatResult:
         session_id=data.get("session_id"),  # type: ignore[arg-type]
         sources=[_parse_source(s) for s in (data.get("sources") or [])],  # type: ignore[union-attr]
         history=[_parse_message(m) for m in (data.get("history") or [])],  # type: ignore[union-attr]
+        groundedness=_parse_groundedness(data.get("groundedness")),
+        contradiction=_parse_contradiction(data.get("contradiction")),
     )
 
 

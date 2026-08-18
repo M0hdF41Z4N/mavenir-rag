@@ -16,7 +16,13 @@ import logging
 import streamlit as st
 
 import api_client
-from api_client import ApiError, ChatMessage, ChatSource
+from api_client import (
+    ApiError,
+    ChatMessage,
+    ChatSource,
+    ContradictionReport,
+    GroundednessReport,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,6 +50,48 @@ def _render_sources(sources: list[ChatSource]) -> None:
             st.markdown(header)
             if src.chunk_excerpt:
                 st.caption(src.chunk_excerpt)
+
+
+def _render_groundedness(report: GroundednessReport | None) -> None:
+    """Show the verifier badge and per-claim citations for a just-answered turn.
+
+    Only rendered when the backend groundedness check ran (`checked`). Unchecked answers
+    (feature disabled) show nothing so the UI is unchanged from before.
+    """
+    if report is None or not report.checked:
+        return
+
+    if report.is_grounded:
+        st.success("✅ Grounded — every claim is supported by the sources.")
+    else:
+        st.warning("⚠️ Some claims are not supported by the retrieved sources.")
+
+    if not report.citations:
+        return
+    with st.expander("🔎 Claim-level citations"):
+        for citation in report.citations:
+            markers = "".join(f"[{i}]" for i in citation.source_indices) or "—"
+            mark = "✅" if citation.is_supported else "⚠️"
+            st.markdown(f"{mark} {citation.claim} {markers}")
+            for src in citation.sources:
+                page = f" · p.{src.page_num}" if src.page_num is not None else ""
+                st.caption(f"↳ {src.file_name}{page}")
+
+
+def _render_contradictions(report: ContradictionReport | None) -> None:
+    """Surface disagreements the backend detected among the retrieved sources."""
+    if report is None or not report.checked or not report.has_contradiction:
+        return
+    with st.expander(f"⚡ {len(report.contradictions)} source conflict(s) detected", expanded=True):
+        for conflict in report.contradictions:
+            st.markdown(f"**Conflict:** {conflict.description}")
+            names = []
+            if conflict.source_a is not None:
+                names.append(conflict.source_a.file_name)
+            if conflict.source_b is not None:
+                names.append(conflict.source_b.file_name)
+            if names:
+                st.caption("Between: " + " ↔ ".join(names))
 
 
 def _render_history() -> None:
@@ -146,7 +194,9 @@ def _handle_query(query: str) -> None:
 
         st.session_state.session_id = result.session_id
         st.markdown(result.answer)
+        _render_contradictions(result.contradiction)
         _render_sources(result.sources)
+        _render_groundedness(result.groundedness)
 
     st.session_state.messages.append(
         ChatMessage(role="assistant", content=result.answer, sources=result.sources)
